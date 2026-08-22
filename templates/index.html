@@ -1,0 +1,108 @@
+<title>AI Content Agency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/office.css">
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <button type="button" id="nav-toggle-btn" class="icon-btn nav-toggle" title="Menu">☰</button>
+      <span class="logo">🏢</span> <span>AI Content Agency</span>
+    </div>
+    <div class="topbar-right">
+      <span id="current-batch-label" class="pill pill-batch">No batch yet</span>
+      <button type="button" id="stop-batch-btn" class="small-btn" style="display:none">Stop</button>
+      <button type="button" id="delete-batch-btn" class="small-btn danger" style="display:none">Delete</button>
+      <span class="pill pill-live">● Office Open</span>
+      <span id="tunnel-pill" class="pill">● Media Tunnel …</span>
+      <div style="position:relative">
+        <button type="button" id="notif-btn" class="icon-btn" title="Notifications">
+          🔔<span id="notif-badge" class="icon-badge" style="display:none">0</span>
+        </button>
+        <div id="notif-dropdown" class="notif-dropdown" style="display:none"></div>
+      </div>
+      <button type="button" id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+      <span class="avatar-chip">🧑‍💼</span>
+      <button id="new-batch-btn" class="btn btn-primary">+ New Batch</button>
+      <button type="button" id="chat-toggle-btn" class="icon-btn chat-toggle" title="Chat with Michael">💬</button>
+    </div>
+  </header>
+
+  <div id="drawer-backdrop" class="drawer-backdrop"></div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="nav-group">
+        <div class="nav-title">Navigation</div>
+        <button class="nav-item active" data-view="office"><span>Office Floor</span></button>
+        <button class="nav-item" data-view="tasks"><span>Task Board</span></button>
+        <button class="nav-item" data-view="review"><span>Review &amp; Approval</span><span id="nav-review-badge" class="nav-badge" style="display:none">0</span></button>
+        <button class="nav-item" data-view="activity"><span>Activity Feed</span></button>
+      </div>
+      <div class="nav-group">
+        <div class="nav-title">Team</div>
+        <div id="team-list" class="team-list"></div>
+      </div>
+      <div class="nav-group instagram-status">
+        <div class="nav-title">Instagram</div>
+        <div id="ig-status" class="ig-status">checking…</div>
+        <div id="tunnel-detail" class="ig-status" style="margin-top:6px"></div>
+        <button type="button" id="ig-test-btn" class="small-btn" style="margin-top:6px;width:100%">Test Connection</button>
+      </div>
+    </nav>
+
+    <main class="main">
+      <section id="view-office" class="view active">
+        <div class="main-header">
+          <h2>Office Floor</h2>
+          <p>Explore your team's rooms and check their progress</p>
+        </div>
+        <div class="office-floor" id="office-floor"></div>
+      </section>
+
+      <section id="view-tasks" class="view">
+        <div class="main-header"><h2>Task Board</h2><p>Every video's current stage, agent-by-agent</p></div>
+        <div class="kanban" id="kanban"></div>
+      </section>
+
+      <section id="view-review" class="view">
+        <div class="main-header"><h2>Review &amp; Approval</h2><p>Approve a finished batch before Sophia publishes it</p></div>
+        <div id="review-screen"></div>
+      </section>
+
+      <section id="view-activity" class="view">
+        <div class="main-header"><h2>Activity Feed</h2><p>Everything the team has actually done, in order</p></div>
+        <div class="activity-feed-full" id="activity-feed-full"></div>
+      </section>
+    </main>
+
+    <aside class="chat-panel" id="chat-panel">
+      <div class="chat-header">
+        <span class="avatar-chip">🧑‍💼</span>
+        <div><div class="chat-title">Michael</div><span class="chat-role">AI Manager</span></div>
+        <button type="button" id="chat-close-btn" class="icon-btn chat-close" title="Close">✕</button>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="quick-actions" style="padding:0 16px 14px">
+        <h4>Quick Actions</h4>
+        <div class="quick-actions-grid">
+          <button type="button" class="quick-action-btn" id="qa-new-batch">➕ New Batch</button>
+          <button type="button" class="quick-action-btn" id="qa-reports">📊 View Reports</button>
+          <button type="button" class="quick-action-btn" id="qa-team-chat">💬 Team Chat</button>
+          <button type="button" class="quick-action-btn" id="qa-ig-test">📷 Test Instagram</button>
+        </div>
+      </div>
+      <form id="chat-form" class="chat-form">
+        <input id="chat-input" type="text" placeholder="Message Michael…" autocomplete="off">
+        <button type="submit" class="btn btn-primary">Send</button>
+      </form>
+    </aside>
+  </div>
+
+  <div class="activity-ticker" id="activity-ticker"></div>
+</div>
+
+<div id="modal-root"></div>
+
+<script src="/static/js/app.js"></script>

@@ -1,0 +1,14 @@
+# This backend imports the yt-downloader and video-editor apps' own
+# modules in-process, so this single environment needs their dependencies
+# too (see backend/external_apps.py) alongside this project's own.
+flask>=3.0
+requests>=2.31
+openai>=1.30
+
+# From the yt-downloader app
+yt-dlp>=2024.1.0
+imageio-ffmpeg>=0.5.1
+
+# From the video-editor app
+Pillow>=10.0
+faster-whisper>=1.0
