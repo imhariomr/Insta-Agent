@@ -5,12 +5,14 @@ media_server (see media_server.py) tunneled by tunnel.py — this app itself
 is never exposed publicly."""
 import json
 import os
+import shutil
 import threading
 
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
-from . import cleanup, config, db, events, live_progress, media_server, orchestrator, timeparse, tunnel
+from . import cleanup, config, db, editor_bridge, events, live_progress, media_server, orchestrator, timeparse, tunnel
 from .agents import michael
+from .notify import push_state
 from .tools import instagram_tool
 
 _TUNNEL_CHAT_MESSAGES = {
@@ -102,8 +104,21 @@ def api_create_batch():
         copied_from_idx = v.get("copied_from")
         if not isinstance(copied_from_idx, int) or not (0 <= copied_from_idx < idx):
             copied_from_idx = None
+        video_filter = (v.get("video_filter") or "none").strip()
+        video_resolution = (v.get("resolution") or "").strip()
+        font_family = (v.get("font_family") or "poppins").strip()
+        caption_position = (v.get("caption_position") or "top").strip()
+        font_color = (v.get("font_color") or "").strip()
+        aspect_ratio = (v.get("aspect_ratio") or "1:1").strip()
+        caption_style = (v.get("caption_style") or "band").strip()
+        skip_caption = bool(v.get("skip_caption"))
+        if skip_caption:
+            caption_text, description, copied_from_idx = None, "", None
         db.add_video(batch_id, idx, v["url"].strip(), start_seconds,
-                     caption_text=caption_text, description=description, copied_from_idx=copied_from_idx)
+                     caption_text=caption_text, description=description, copied_from_idx=copied_from_idx,
+                     video_filter=video_filter, resolution=video_resolution,
+                     font_family=font_family, caption_position=caption_position, font_color=font_color,
+                     aspect_ratio=aspect_ratio, caption_style=caption_style, skip_caption=skip_caption)
 
     orchestrator.start_batch(batch_id)
     return jsonify({"batch_id": batch_id})
@@ -134,6 +149,64 @@ def api_retry_video(video_id):
         return jsonify({"error": "Video not found."}), 404
     orchestrator.retry_video(video_id)
     return jsonify({"success": True})
+
+
+@app.route("/api/videos/<int:video_id>/reject", methods=["POST"])
+def api_reject_video(video_id):
+    if not db.get_video(video_id):
+        return jsonify({"error": "Video not found."}), 404
+    reason = ((request.get_json(silent=True) or {}).get("reason") or "").strip()
+    if not reason:
+        return jsonify({"error": "Add a reason for the rejection."}), 400
+    message = michael.handle_rejection(video_id, reason)
+    return jsonify({"success": True, "message": message})
+
+
+@app.route("/api/videos/<int:video_id>/open-editor", methods=["POST"])
+def api_open_editor(video_id):
+    video = db.get_video(video_id)
+    if not video:
+        return jsonify({"error": "Video not found."}), 404
+    try:
+        editor_url = editor_bridge.open_for_manual_edit(video, request.host_url.rstrip("/"))
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Couldn't open the editor: {exc}"}), 500
+    return jsonify({"editor_url": editor_url})
+
+
+# Sync-edit is called cross-origin by the editor's own page (a different
+# port), so it's the one endpoint that needs an explicit CORS allowance —
+# scoped to just the editor's own origin, not '*'.
+_EDITOR_ORIGIN = f"http://127.0.0.1:{config.EDITOR_APP_PORT}"
+
+
+@app.route("/api/videos/<int:video_id>/sync-edit", methods=["POST", "OPTIONS"])
+def api_sync_edit(video_id):
+    if request.method == "OPTIONS":
+        resp = jsonify({})
+    else:
+        video = db.get_video(video_id)
+        if not video:
+            resp = jsonify({"error": "Video not found."})
+            resp.status_code = 404
+        else:
+            job_id = (request.get_json(silent=True) or {}).get("job_id", "")
+            try:
+                export_path = editor_bridge.resolve_export_path(job_id)
+                dest_path = os.path.join(config.batch_dir(video["batch_id"]), "final", f"video_{video_id}.mp4")
+                shutil.copyfile(export_path, dest_path)
+                db.update_video(video_id, final_path=dest_path)
+                push_state(video_id=video_id, batch_id=video["batch_id"])
+                resp = jsonify({"success": True})
+            except Exception as exc:
+                resp = jsonify({"error": str(exc)})
+                resp.status_code = 400
+    resp.headers["Access-Control-Allow-Origin"] = _EDITOR_ORIGIN
+    resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resp
 
 
 @app.route("/api/batches/<int:batch_id>/stop", methods=["POST"])

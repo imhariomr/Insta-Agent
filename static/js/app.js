@@ -322,13 +322,18 @@ function renderReview() {
   root.innerHTML = batches.map(renderBatchReview).join("<hr style='border:none;border-top:1px solid var(--border);margin:24px 0'>");
   root.querySelectorAll("[data-approve]").forEach(btn => btn.onclick = () => confirmApprove(btn.dataset.approve));
   root.querySelectorAll("[data-reject]").forEach(btn => btn.onclick = () => rejectBatch(btn.dataset.reject));
+  root.querySelectorAll("[data-reject-video]").forEach(btn => btn.onclick = () => rejectVideo(btn.dataset.rejectVideo));
+  root.querySelectorAll("[data-manual-edit]").forEach(btn => btn.onclick = () => openManualEdit(btn.dataset.manualEdit, btn));
 }
 
 function renderBatchReview(batch) {
   const videos = state.videos.filter(v => v.batch_id === batch.id);
   const cards = videos.map(v => {
     const filename = v.final_path ? v.final_path.split(/[\\/]/).pop() : "";
-    const src = filename ? `/media/${batch.id}/${filename}` : "";
+    // Cache-bust with updated_at: a manual-edit sync overwrites this same
+    // filename in place, so without this the browser just keeps showing
+    // its cached copy of the pre-sync video.
+    const src = filename ? `/media/${batch.id}/${filename}?v=${v.updated_at}` : "";
     const qa = v.qa_report_json ? JSON.parse(v.qa_report_json) : null;
     const checks = qa ? qa.checks.map(qaCheckHtml).join("") : "";
     return `<div class="review-card">
@@ -336,15 +341,68 @@ function renderBatchReview(batch) {
       <div><strong>Video #${v.idx + 1}</strong></div>
       <div class="caption-text">"${escapeHtml(v.caption_text || "")}"</div>
       ${checks}
+      <div style="display:flex;gap:8px">
+        <button type="button" class="small-btn" data-manual-edit="${v.id}">Manual edit…</button>
+        <button type="button" class="small-btn" data-reject-video="${v.id}">Reject this video…</button>
+      </div>
     </div>`;
   }).join("");
 
   return `<h3>Batch #${batch.id} — ${videos.length} Video${videos.length !== 1 ? "s" : ""} Ready</h3>
     <div class="review-grid">${cards}</div>
     <div class="review-actions">
-      <button class="btn btn-danger" data-reject="${batch.id}">Reject Batch</button>
+      <button class="btn btn-danger" data-reject="${batch.id}">Reject Entire Batch</button>
       <button class="btn btn-primary" data-approve="${batch.id}">Approve &amp; Publish</button>
     </div>`;
+}
+
+function rejectVideo(videoId) {
+  const modal = openModal(`
+    <h3>Reject this video</h3>
+    <p style="color:var(--text-dim)">Tell us what's wrong — caption or video, either way it gets sent back to fix it.</p>
+    <textarea id="reject-reason" rows="3" style="width:100%" placeholder="e.g. the caption is too long, or the crop cuts off the subject"></textarea>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="reject-cancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="reject-submit">Reject &amp; Fix</button>
+    </div>`);
+  modal.querySelector("#reject-cancel").onclick = closeModal;
+  modal.querySelector("#reject-submit").onclick = async () => {
+    const reason = modal.querySelector("#reject-reason").value.trim();
+    if (!reason) { alert("Add a reason first."); return; }
+    const res = await fetch(`/api/videos/${videoId}/reject`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason }),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    closeModal();
+    await fetchState();
+  };
+}
+
+async function openManualEdit(videoId, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Opening…";
+  // Opened synchronously, still inside the click's event handler — most
+  // browsers only allow window.open without a popup block when it's a
+  // direct result of a user gesture, and by the time an awaited fetch
+  // resolves that gesture has expired. Point this blank tab at the real
+  // URL once we have it instead of opening a fresh tab after the await.
+  const editorTab = window.open("", "_blank");
+  try {
+    const res = await fetch(`/api/videos/${videoId}/open-editor`, { method: "POST" });
+    const data = await res.json();
+    if (data.error) {
+      if (editorTab) editorTab.close();
+      alert(data.error);
+      return;
+    }
+    if (editorTab) editorTab.location.href = data.editor_url;
+    else window.open(data.editor_url, "_blank");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
 }
 
 // ---- modal helpers ----
@@ -422,19 +480,52 @@ async function rejectBatch(batchId) {
 
 const NB_DRAFT_KEY = "nb-draft";
 
+// Same presets/labels as the local video editor's VIDEO_FILTER_LABELS.
+const VIDEO_FILTER_OPTIONS = [
+  ["none", "None"], ["bw", "Black & White"], ["vintage", "Vintage"],
+  ["vivid", "Vivid"], ["cool", "Cool"],
+];
+const RESOLUTION_OPTIONS = [
+  ["", "Batch default"], ["1080p", "1080p"], ["720p", "720p"], ["480p", "480p"], ["360p", "360p"],
+];
+// Same font/position choices as the local video editor (poppins/top are its defaults too).
+const FONT_OPTIONS = [
+  ["poppins", "Poppins"], ["playfair", "Playfair Display"], ["didot", "Didot"],
+  ["lemon_yellow_sun", "DK Lemon Yellow Sun"], ["trashhand", "TrashHand"], ["the_skinny", "The Skinny"],
+  ["amatic_sc", "Amatic SC Bold"], ["wild_youth", "Wild Youth"],
+];
+const CAPTION_POSITION_OPTIONS = [
+  ["top", "Top"], ["center", "Center"], ["bottom", "Bottom"],
+];
+// Same keys as the editor's Style select — band can't sit at "center" (handled server-side).
+const CAPTION_STYLE_OPTIONS = [
+  ["band", "Black band"], ["overlay", "Floating box"], ["transparent", "Transparent"],
+];
+// "" (null) is the default here — matches the editor's TEXT_COLORS keys otherwise.
+const FONT_COLOR_OPTIONS = [
+  ["", "Default"], ["white", "White"], ["yellow", "Yellow"],
+];
+// Same keys as the local video editor's ASPECT_RATIOS — 1:1 is its default too.
+const ASPECT_RATIO_OPTIONS = [
+  ["1:1", "1:1 · Square"], ["4:5", "4:5 · Portrait"], ["9:16", "9:16 · Full portrait"], ["16:9", "16:9 · Landscape"],
+];
+
 // Mobile browsers reload a backgrounded tab to reclaim memory (e.g. when the
 // user switches apps to copy a URL), which wipes the in-memory modal along
 // with whatever was typed. Persist the draft as they type so reopening after
 // such a reload restores it instead of losing it.
 function openNewBatchModal(draft) {
   const modal = openModal(`
-    <h3>New Batch</h3>
+    <div class="modal-title-row">
+      <h3 style="margin:0">New Batch</h3>
+      <label class="check-row"><input type="checkbox" id="nb-show-advanced" ${draft?.show_advanced ? "checked" : ""}><span>Show advanced options</span></label>
+    </div>
     <div id="video-rows"></div>
     <button type="button" class="small-btn" id="add-video-row">+ Add Video</button>
     <div class="field" style="margin-top:16px"><label>Resolution</label>
       <select id="nb-resolution">
-        <option${draft?.resolution === "1080p" ? " selected" : ""}>1080p</option>
-        <option${!draft || draft.resolution === "720p" ? " selected" : ""}>720p</option>
+        <option${!draft || draft.resolution === "1080p" ? " selected" : ""}>1080p</option>
+        <option${draft?.resolution === "720p" ? " selected" : ""}>720p</option>
         <option${draft?.resolution === "480p" ? " selected" : ""}>480p</option>
         <option${draft?.resolution === "360p" ? " selected" : ""}>360p</option>
       </select>
@@ -448,6 +539,10 @@ function openNewBatchModal(draft) {
 
   const rowsDiv = modal.querySelector("#video-rows");
   let uidCounter = 0;
+
+  const showAdvancedCb = modal.querySelector("#nb-show-advanced");
+  modal.classList.toggle("show-advanced", showAdvancedCb.checked);
+  showAdvancedCb.onchange = () => { modal.classList.toggle("show-advanced", showAdvancedCb.checked); saveDraft(); };
 
   function refreshCopyFromDropdowns() {
     const rows = [...rowsDiv.querySelectorAll(".video-row")];
@@ -476,15 +571,80 @@ function openNewBatchModal(draft) {
         <button type="button" class="small-btn nb-remove">✕</button>
       </div>
       <div class="video-row-extra">
+        <label class="check-row"><input type="checkbox" class="nb-skip-caption" ${data.skip_caption ? "checked" : ""}><span>Skip caption — no caption on this video</span></label>
         <input type="text" class="nb-caption" placeholder="Caption (leave blank to let Emma write it)" value="${escapeHtml(data.caption || "")}">
         <textarea class="nb-description" placeholder="Description for Emma — what's in this clip, tone, style (optional)" rows="2">${escapeHtml(data.description || "")}</textarea>
-        <select class="nb-copy-from"></select>
+        <div class="field advanced-field">
+          <label>Aspect ratio</label>
+          <select class="nb-aspect-ratio">
+            ${ASPECT_RATIO_OPTIONS.map(([value, label]) =>
+              `<option value="${value}"${(data.aspect_ratio || "1:1") === value ? " selected" : ""}>${label}</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div class="field advanced-field">
+          <label>Color/grain filter</label>
+          <select class="nb-filter">
+            ${VIDEO_FILTER_OPTIONS.map(([value, label]) =>
+              `<option value="${value}"${(data.video_filter || "none") === value ? " selected" : ""}>${label}</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label>Download resolution</label>
+          <select class="nb-resolution">
+            ${RESOLUTION_OPTIONS.map(([value, label]) =>
+              `<option value="${value}"${(data.resolution || "") === value ? " selected" : ""}>${label}</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div class="field advanced-field">
+          <label>Caption font</label>
+          <select class="nb-font">
+            ${FONT_OPTIONS.map(([value, label]) =>
+              `<option value="${value}"${(data.font_family || "poppins") === value ? " selected" : ""}>${label}</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div class="field advanced-field">
+          <label>Caption color</label>
+          <select class="nb-font-color">
+            ${FONT_COLOR_OPTIONS.map(([value, label]) =>
+              `<option value="${value}"${(data.font_color || "") === value ? " selected" : ""}>${label}</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div class="field advanced-field">
+          <label>Caption position</label>
+          <select class="nb-caption-position">
+            ${CAPTION_POSITION_OPTIONS.map(([value, label]) =>
+              `<option value="${value}"${(data.caption_position || "top") === value ? " selected" : ""}>${label}</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div class="field advanced-field">
+          <label>Caption style</label>
+          <select class="nb-caption-style">
+            ${CAPTION_STYLE_OPTIONS.map(([value, label]) =>
+              `<option value="${value}"${(data.caption_style || "band") === value ? " selected" : ""}>${label}</option>`
+            ).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label>Copy from another video</label>
+          <select class="nb-copy-from"></select>
+        </div>
       </div>`;
     row.querySelector(".nb-remove").onclick = () => { row.remove(); refreshCopyFromDropdowns(); saveDraft(); };
     row.querySelector(".nb-copy-from").onchange = e => {
       row.querySelector(".video-row-extra").classList.toggle("copy-active", !!e.target.value);
       saveDraft();
     };
+    row.querySelector(".nb-skip-caption").onchange = e => {
+      row.querySelector(".video-row-extra").classList.toggle("skip-caption-active", e.target.checked);
+      saveDraft();
+    };
+    row.querySelector(".video-row-extra").classList.toggle("skip-caption-active", !!data.skip_caption);
     rowsDiv.appendChild(row);
     refreshCopyFromDropdowns();
     if (Number.isInteger(data.copiedFromPosition)) {
@@ -510,12 +670,21 @@ function openNewBatchModal(draft) {
           start: row.querySelector(".nb-start").value,
           caption: row.querySelector(".nb-caption").value,
           description: row.querySelector(".nb-description").value,
+          skip_caption: row.querySelector(".nb-skip-caption").checked,
+          aspect_ratio: row.querySelector(".nb-aspect-ratio").value,
+          video_filter: row.querySelector(".nb-filter").value,
+          resolution: row.querySelector(".nb-resolution").value,
+          font_family: row.querySelector(".nb-font").value,
+          font_color: row.querySelector(".nb-font-color").value,
+          caption_position: row.querySelector(".nb-caption-position").value,
+          caption_style: row.querySelector(".nb-caption-style").value,
           copiedFromPosition: copiedFromPosition !== null && copiedFromPosition >= 0 ? copiedFromPosition : null,
         };
       }),
       resolution: modal.querySelector("#nb-resolution").value,
       watermark_enabled: modal.querySelector("#nb-watermark-enabled").checked,
       watermark_text: modal.querySelector("#nb-watermark-text").value,
+      show_advanced: showAdvancedCb.checked,
     }));
   }
   modal.addEventListener("input", saveDraft);
@@ -536,6 +705,14 @@ function openNewBatchModal(draft) {
         start_time: row.querySelector(".nb-start").value.trim(),
         caption: row.querySelector(".nb-caption").value.trim(),
         description: row.querySelector(".nb-description").value.trim(),
+        skip_caption: row.querySelector(".nb-skip-caption").checked,
+        aspect_ratio: row.querySelector(".nb-aspect-ratio").value,
+        video_filter: row.querySelector(".nb-filter").value,
+        resolution: row.querySelector(".nb-resolution").value,
+        font_family: row.querySelector(".nb-font").value,
+        font_color: row.querySelector(".nb-font-color").value,
+        caption_position: row.querySelector(".nb-caption-position").value,
+        caption_style: row.querySelector(".nb-caption-style").value,
         copied_from: copyUid && uidToFinalIdx[copyUid] !== undefined ? uidToFinalIdx[copyUid] : null,
       };
     });

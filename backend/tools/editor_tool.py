@@ -15,9 +15,11 @@ def inspect_video(path):
 
 
 def create_video_clip(input_file, start_time, duration=30, aspect_ratio="1:1",
-                       caption="", caption_bold=True, watermark_enabled=True, watermark_text="",
+                       caption="", caption_bold=False, watermark_enabled=True, watermark_text="",
                        dest_path=None, on_progress=None,
-                       crop_x=0.5, crop_y=0.5, zoom=1.0):
+                       crop_x=0.5, crop_y=0.5, zoom=1.0, video_filter="none",
+                       font_family="poppins", caption_position="top", font_color="",
+                       caption_style="band"):
     editor_app = get_editor_app()
 
     try:
@@ -32,9 +34,15 @@ def create_video_clip(input_file, start_time, duration=30, aspect_ratio="1:1",
         return {"success": False, "error": "Clip window is too short — source video ends too soon after this start time."}
 
     canvas_w, canvas_h = editor_app.ASPECT_RATIOS.get(aspect_ratio, editor_app.ASPECT_RATIOS["1:1"])
+    style = caption_style if caption_style in ("band", "overlay", "transparent") else "band"
+    position = caption_position if caption_position in ("top", "center", "bottom") else "top"
+    if style == "band" and position == "center":
+        position = "top"  # same rule the editor's own /api/export enforces — a solid band can't sit dead-center
     cfg = {
         "text": caption or "", "font_size": 44, "bold": bool(caption_bold), "align": "center",
-        "style": "band", "position": "top",
+        "style": style, "position": position,
+        "font_family": font_family if font_family in editor_app.FONT_FAMILIES else "poppins",
+        "font_color": font_color if font_color in editor_app.TEXT_COLORS else "white",
         "watermark_text": (watermark_text or "") if watermark_enabled else "",
     }
 
@@ -56,6 +64,7 @@ def create_video_clip(input_file, start_time, duration=30, aspect_ratio="1:1",
             on_progress=(on_progress or (lambda pct: None)),
             overlays=overlays,
             crop_x=crop_x, crop_y=crop_y, zoom=zoom,
+            video_filter=editor_app.VIDEO_FILTER_PRESETS.get(video_filter, ""),
         )
     except editor_app.ExportError as exc:
         return {"success": False, "error": f"Export failed: {exc}"}

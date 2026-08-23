@@ -50,9 +50,102 @@ in "reply" — do not say you're making a change unless "route" is actually set,
 non-null "route" that passes validation actually does anything."""
 
 ROUTE_ALLOWED_FIELDS = {
-    "Ryan": {"caption_bold"},
+    "Ryan": {"caption_bold", "video_filter", "font_family", "caption_position", "font_color",
+             "aspect_ratio", "caption_style"},
     "Emma": {"description"},
 }
+VIDEO_FILTER_KEYS = {"none", "bw", "vintage", "vivid", "cool"}
+FONT_FAMILY_KEYS = {"poppins", "playfair", "didot", "lemon_yellow_sun", "trashhand",
+                     "the_skinny", "amatic_sc", "wild_youth"}
+CAPTION_POSITION_KEYS = {"top", "center", "bottom"}
+FONT_COLOR_KEYS = {"white", "yellow"}
+ASPECT_RATIO_KEYS = {"1:1", "4:5", "9:16", "16:9"}
+CAPTION_STYLE_KEYS = {"band", "overlay", "transparent"}
+
+REJECTION_SYSTEM_PROMPT = """You are Michael, a project manager for a short-form video pipeline. The \
+human just rejected one finished video and typed their reason. Decide who should fix it:
+- Ryan (video editor) handles: the color/grain filter, the caption's font, its color, its on-screen \
+position, its style (solid band / floating box / transparent), whether the caption is bold, the output \
+aspect ratio/crop shape, or general re-editing for anything else video-related (bad crop, low quality, \
+watermark, timing, etc).
+- Emma (caption writer) handles: what the caption text says, its wording, tone, or style.
+
+Reply with ONLY a JSON object: {"target_agent": "Ryan" or "Emma", "field_updates": {...}, \
+"note": "one short sentence explaining the fix, to show the human"}.
+
+field_updates rules:
+- target_agent "Emma": exactly one key, "description" — rewritten instructions for Emma based on the \
+reason, in your own words. Emma regenerates the caption from scratch using it.
+- target_agent "Ryan": zero or more of these keys, only if the reason clearly calls for it:
+  "caption_bold": true/false
+  "video_filter": one of "none", "bw", "vintage", "vivid", "cool"
+  "font_family": one of "poppins", "playfair", "didot", "lemon_yellow_sun", "trashhand", "the_skinny", \
+"amatic_sc", "wild_youth"
+  "font_color": one of "white", "yellow"
+  "caption_position": one of "top", "center", "bottom"
+  "caption_style": one of "band" (solid black band), "overlay" (floating box), "transparent" (no box, \
+just the text) — note a band can't sit at "center", only overlay/transparent can
+  "aspect_ratio": one of "1:1", "4:5", "9:16", "16:9" (square, portrait 4:5, full portrait 9:16, landscape)
+  If the reason describes a video problem that isn't one of the above (bad crop, quality, watermark, \
+  timing), set field_updates to {} — Ryan will simply redo the edit with everything unchanged."""
+
+
+def handle_rejection(video_id, reason):
+    """A human rejected one video from WAITING_APPROVAL and gave a reason.
+    Classifies it as a caption problem (-> Emma rewrites) or a video/edit
+    problem (-> Ryan re-renders, optionally with changed filter/font/
+    position/bold), then reuses the same request_video_edit machinery
+    Michael's chat routing uses. Falls back to a plain Ryan re-edit if the
+    LLM call fails or returns something unusable — never leaves the
+    rejection silently unapplied."""
+    video = db.get_video(video_id)
+    if not video:
+        return "That video doesn't exist."
+    batch = db.get_batch(video["batch_id"])
+    if not batch or batch["status"] != "WAITING_APPROVAL":
+        return "That video isn't waiting for approval anymore."
+
+    target_agent, updates, note = "Ryan", {}, "Sending it back for another pass."
+    try:
+        messages = [
+            {"role": "system", "content": REJECTION_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Video #{video['idx'] + 1} current caption: "
+                                         f"{video['caption_text']!r}\nRejection reason: {reason}"},
+        ]
+        result = llm.chat_json(messages)
+        if result.get("target_agent") in ROUTE_ALLOWED_FIELDS:
+            target_agent = result["target_agent"]
+        raw_updates = result.get("field_updates") if isinstance(result.get("field_updates"), dict) else {}
+        updates = {k: v for k, v in raw_updates.items() if k in ROUTE_ALLOWED_FIELDS[target_agent]}
+        note = (result.get("note") or note).strip()
+    except Exception:
+        pass  # keep the Ryan/{} fallback — a plain re-edit is still a real fix attempt
+
+    if target_agent == "Ryan":
+        if "caption_bold" in updates:
+            updates["caption_bold"] = bool(updates["caption_bold"])
+        if updates.get("video_filter") not in VIDEO_FILTER_KEYS:
+            updates.pop("video_filter", None)
+        if updates.get("font_family") not in FONT_FAMILY_KEYS:
+            updates.pop("font_family", None)
+        if updates.get("caption_position") not in CAPTION_POSITION_KEYS:
+            updates.pop("caption_position", None)
+        if updates.get("font_color") not in FONT_COLOR_KEYS:
+            updates.pop("font_color", None)
+        if updates.get("aspect_ratio") not in ASPECT_RATIO_KEYS:
+            updates.pop("aspect_ratio", None)
+        if updates.get("caption_style") not in CAPTION_STYLE_KEYS:
+            updates.pop("caption_style", None)
+    else:  # Emma
+        description = str(updates.get("description", "")).strip() or reason.strip()
+        updates = {"description": description, "caption_text": None,
+                   "caption_candidates_json": None, "copied_from_idx": None}
+
+    from .. import orchestrator  # lazy: orchestrator imports this module
+    orchestrator.request_video_edit(video_id, target_agent, updates)
+    message = f"Got it — Video #{video['idx'] + 1} rejected ({reason}). {note}"
+    announce(message, batch_id=video["batch_id"])
+    return message
 
 
 def _state_summary(state):

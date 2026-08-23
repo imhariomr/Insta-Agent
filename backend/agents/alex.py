@@ -11,10 +11,11 @@ from ..tools import youtube_tool
 def run(video):
     video_id, batch_id, idx = video["id"], video["batch_id"], video["idx"]
     batch = db.get_batch(batch_id)
+    resolution = video["resolution"] or batch["resolution"]
 
     db.update_video(video_id, status="DOWNLOADING")
     push_state(video_id=video_id, batch_id=batch_id)
-    emit("Alex", f"Started downloading Video #{idx + 1} at {batch['resolution']}",
+    emit("Alex", f"Started downloading Video #{idx + 1} at {resolution}",
          batch_id=batch_id, video_id=video_id)
 
     dest_dir = os.path.join(config.batch_dir(batch_id), "downloaded")
@@ -22,11 +23,11 @@ def run(video):
     def on_progress(pct, speed, eta):
         live_progress.set_progress(
             video_id, percent=pct, stage="downloading",
-            speed_bps=speed, eta_seconds=eta, resolution=batch["resolution"],
+            speed_bps=speed, eta_seconds=eta, resolution=resolution,
         )
 
     result = youtube_tool.download_youtube(
-        video["youtube_url"], resolution=batch["resolution"], dest_dir=dest_dir, on_progress=on_progress,
+        video["youtube_url"], resolution=resolution, dest_dir=dest_dir, on_progress=on_progress,
     )
     live_progress.clear(video_id)
 

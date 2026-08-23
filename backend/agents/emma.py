@@ -34,6 +34,13 @@ def run(video, allow_reuse=True):
     problem, so it must go through real generation instead of reusing it."""
     video_id, batch_id, idx = video["id"], video["batch_id"], video["idx"]
 
+    if video["skip_caption"]:
+        db.update_video(video_id, status="CAPTION_READY", caption_text="", caption_reason="")
+        emit("Emma", f"Skipping caption for Video #{idx + 1} — no caption requested",
+             batch_id=batch_id, video_id=video_id)
+        push_state(video_id=video_id, batch_id=batch_id)
+        return True
+
     if allow_reuse and video["caption_text"]:
         db.update_video(video_id, status="CAPTION_READY",
                          caption_reason=video["caption_reason"] or "Provided by you")

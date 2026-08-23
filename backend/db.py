@@ -40,7 +40,15 @@ CREATE TABLE IF NOT EXISTS videos (
     caption_reason TEXT,
     description TEXT NOT NULL DEFAULT '',
     copied_from_idx INTEGER,
-    caption_bold INTEGER NOT NULL DEFAULT 1,
+    caption_bold INTEGER NOT NULL DEFAULT 0,
+    video_filter TEXT NOT NULL DEFAULT 'none',
+    resolution TEXT NOT NULL DEFAULT '',
+    font_family TEXT NOT NULL DEFAULT 'poppins',
+    caption_position TEXT NOT NULL DEFAULT 'top',
+    font_color TEXT NOT NULL DEFAULT '',
+    aspect_ratio TEXT NOT NULL DEFAULT '1:1',
+    caption_style TEXT NOT NULL DEFAULT 'band',
+    skip_caption INTEGER NOT NULL DEFAULT 0,
     ig_container_id TEXT,
     final_path TEXT,
     qa_report_json TEXT,
@@ -90,8 +98,16 @@ def init_db():
         # already existed on disk before these were introduced.
         _ensure_column(conn, "videos", "description", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(conn, "videos", "copied_from_idx", "INTEGER")
-        _ensure_column(conn, "videos", "caption_bold", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(conn, "videos", "caption_bold", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(conn, "videos", "ig_container_id", "TEXT")
+        _ensure_column(conn, "videos", "video_filter", "TEXT NOT NULL DEFAULT 'none'")
+        _ensure_column(conn, "videos", "resolution", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, "videos", "font_family", "TEXT NOT NULL DEFAULT 'poppins'")
+        _ensure_column(conn, "videos", "caption_position", "TEXT NOT NULL DEFAULT 'top'")
+        _ensure_column(conn, "videos", "font_color", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(conn, "videos", "aspect_ratio", "TEXT NOT NULL DEFAULT '1:1'")
+        _ensure_column(conn, "videos", "caption_style", "TEXT NOT NULL DEFAULT 'band'")
+        _ensure_column(conn, "videos", "skip_caption", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(conn, "batches", "stop_requested", "INTEGER NOT NULL DEFAULT 0")
         conn.commit()
     finally:
@@ -116,13 +132,20 @@ def create_batch(resolution, watermark_enabled, watermark_text):
         conn.close()
 
 
-def add_video(batch_id, idx, youtube_url, start_time_seconds, caption_text=None, description="", copied_from_idx=None):
+def add_video(batch_id, idx, youtube_url, start_time_seconds, caption_text=None, description="",
+              copied_from_idx=None, video_filter="none", resolution="",
+              font_family="poppins", caption_position="top", font_color="", aspect_ratio="1:1",
+              caption_style="band", skip_caption=False):
     conn = get_conn()
     try:
         cur = conn.execute(
             "INSERT INTO videos (batch_id, idx, youtube_url, start_time_seconds, status, caption_text, "
-            "description, copied_from_idx, updated_at) VALUES (?, ?, ?, ?, 'QUEUED', ?, ?, ?, ?)",
-            (batch_id, idx, youtube_url, start_time_seconds, caption_text, description, copied_from_idx, time.time()),
+            "description, copied_from_idx, caption_bold, video_filter, resolution, font_family, "
+            "caption_position, font_color, aspect_ratio, caption_style, skip_caption, updated_at) "
+            "VALUES (?, ?, ?, ?, 'QUEUED', ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (batch_id, idx, youtube_url, start_time_seconds, caption_text, description, copied_from_idx,
+             video_filter, resolution, font_family, caption_position, font_color, aspect_ratio,
+             caption_style, int(bool(skip_caption)), time.time()),
         )
         conn.commit()
         return cur.lastrowid

@@ -33,6 +33,11 @@ YT_APP_DIR = os.environ.get(
 EDITOR_APP_DIR = os.environ.get(
     "EDITOR_APP_DIR", r"C:\Users\HP\Downloads\New folder (3)\New folder\editor"
 )
+# The editor's own Flask app (imported in-process via external_apps) is
+# started as a real server on this port only when a "Manual edit" is first
+# requested — its own docs default to 5050, kept here so it never collides
+# with this app's own port (5100) or the media server's (5101).
+EDITOR_APP_PORT = int(os.environ.get("EDITOR_APP_PORT", "5050"))
 
 # LLM: OpenAI-SDK-compatible client pointed at NVIDIA NIM.
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
@@ -79,7 +84,7 @@ MEDIA_SERVER_PORT = int(os.environ.get("MEDIA_SERVER_PORT", "5101"))
 # handles the .exe suffix on Windows); set explicitly if it's not on PATH.
 CLOUDFLARED_PATH = os.environ.get("CLOUDFLARED_PATH", "").strip()
 
-CLIP_DURATION_SECONDS = 30
+CLIP_DURATION_SECONDS = 29
 MAX_QA_RETRY_LOOPS = 2
 MAX_STAGE_RETRIES = 1
 PIPELINE_WORKERS = 3

@@ -1,5 +1,5 @@
-"""Ryan — Video Editor. Always computes end_time = start_time + 30s himself;
-the user never provides an end timestamp."""
+"""Ryan — Video Editor. Always computes end_time = start_time +
+config.CLIP_DURATION_SECONDS himself; the user never provides an end timestamp."""
 import os
 
 from .. import config, db, live_progress
@@ -31,10 +31,14 @@ def run(video):
 
     result = editor_tool.create_video_clip(
         video["downloaded_path"], start, duration=config.CLIP_DURATION_SECONDS,
-        aspect_ratio="1:1", caption=video["caption_text"] or "", caption_bold=bool(video["caption_bold"]),
+        aspect_ratio=video["aspect_ratio"] or "1:1",
+        caption=video["caption_text"] or "", caption_bold=bool(video["caption_bold"]),
         watermark_enabled=bool(batch["watermark_enabled"]), watermark_text=batch["watermark_text"] or "",
         dest_path=dest_path, on_progress=on_progress,
         crop_x=framing["crop_x"], crop_y=framing["crop_y"], zoom=framing["zoom"],
+        video_filter=video["video_filter"] or "none",
+        font_family=video["font_family"] or "poppins", caption_position=video["caption_position"] or "top",
+        font_color=video["font_color"] or "", caption_style=video["caption_style"] or "band",
     )
     live_progress.clear(video_id)
 
