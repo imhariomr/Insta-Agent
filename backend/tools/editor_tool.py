@@ -31,7 +31,7 @@ def inspect_video(path):
 
 
 def create_video_clip(input_file, start_time, duration=30, aspect_ratio="1:1",
-                       caption="", caption_bold=False, watermark_enabled=True, watermark_text="",
+                       caption="", caption_bold=True, watermark_enabled=True, watermark_text="",
                        dest_path=None, on_progress=None,
                        crop_x=0.5, crop_y=0.5, zoom=1.0, video_filter="none",
                        font_family="poppins", caption_position="top", font_color="",
