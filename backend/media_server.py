@@ -33,7 +33,13 @@ def start(port=None):
     global _server, _thread
     if _server is not None:
         return
-    _server = make_server("127.0.0.1", port or config.MEDIA_SERVER_PORT, media_app)
+    # threaded=True is the fix, not a nicety: make_server defaults to
+    # single-threaded, so while it's mid-stream sending a large video to
+    # Instagram's fetcher, it can't also answer the tunnel monitor's /health
+    # ping — that ping times out, the monitor decides the tunnel is dead,
+    # and restarts it mid-download, aborting Instagram's in-flight fetch
+    # (surfaces there as "Media processing failed (status=ERROR)").
+    _server = make_server("127.0.0.1", port or config.MEDIA_SERVER_PORT, media_app, threaded=True)
     _thread = threading.Thread(target=_server.serve_forever, daemon=True)
     _thread.start()
 

@@ -17,7 +17,7 @@ def run(video):
     emit("David", f"Reviewing Video #{idx + 1}", batch_id=batch_id, video_id=video_id)
 
     expected = {
-        "aspect_ratio": video["aspect_ratio"] or "1:1", "min_duration": 26, "max_duration": 32,
+        "aspect_ratio": video["aspect_ratio"] or "1:1", "min_duration": 22, "max_duration": 28,
         "expect_caption": bool(video["caption_text"]), "caption_text": video["caption_text"] or "",
         "expect_watermark": bool(batch["watermark_enabled"]), "watermark_text": batch["watermark_text"] or "",
         "expect_audio": True,

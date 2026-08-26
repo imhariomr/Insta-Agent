@@ -84,7 +84,7 @@ MEDIA_SERVER_PORT = int(os.environ.get("MEDIA_SERVER_PORT", "5101"))
 # handles the .exe suffix on Windows); set explicitly if it's not on PATH.
 CLOUDFLARED_PATH = os.environ.get("CLOUDFLARED_PATH", "").strip()
 
-CLIP_DURATION_SECONDS = 29
+CLIP_DURATION_SECONDS = 25
 MAX_QA_RETRY_LOOPS = 2
 MAX_STAGE_RETRIES = 1
 PIPELINE_WORKERS = 3

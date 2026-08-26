@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS videos (
     caption_reason TEXT,
     description TEXT NOT NULL DEFAULT '',
     copied_from_idx INTEGER,
-    caption_bold INTEGER NOT NULL DEFAULT 1,
+    caption_bold INTEGER NOT NULL DEFAULT 0,
     video_filter TEXT NOT NULL DEFAULT 'none',
     resolution TEXT NOT NULL DEFAULT '',
     font_family TEXT NOT NULL DEFAULT 'poppins',
@@ -98,7 +98,7 @@ def init_db():
         # already existed on disk before these were introduced.
         _ensure_column(conn, "videos", "description", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(conn, "videos", "copied_from_idx", "INTEGER")
-        _ensure_column(conn, "videos", "caption_bold", "INTEGER NOT NULL DEFAULT 1")
+        _ensure_column(conn, "videos", "caption_bold", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(conn, "videos", "ig_container_id", "TEXT")
         _ensure_column(conn, "videos", "video_filter", "TEXT NOT NULL DEFAULT 'none'")
         _ensure_column(conn, "videos", "resolution", "TEXT NOT NULL DEFAULT ''")
@@ -142,7 +142,7 @@ def add_video(batch_id, idx, youtube_url, start_time_seconds, caption_text=None,
             "INSERT INTO videos (batch_id, idx, youtube_url, start_time_seconds, status, caption_text, "
             "description, copied_from_idx, caption_bold, video_filter, resolution, font_family, "
             "caption_position, font_color, aspect_ratio, caption_style, skip_caption, updated_at) "
-            "VALUES (?, ?, ?, ?, 'QUEUED', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, 'QUEUED', ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (batch_id, idx, youtube_url, start_time_seconds, caption_text, description, copied_from_idx,
              video_filter, resolution, font_family, caption_position, font_color, aspect_ratio,
              caption_style, int(bool(skip_caption)), time.time()),

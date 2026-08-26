@@ -3,26 +3,10 @@ probe_video, _build_base_overlays (the existing caption + watermark
 rendering) and run_export (the existing trim/crop/burn-in ffmpeg pass)
 directly. No overlay math or ffmpeg filter graph is re-derived here."""
 import os
-import re
 import shutil
 import tempfile
 
 from ..external_apps import get_editor_app
-
-# None of the editor's caption fonts (Poppins, Playfair, Didot, and the
-# decorative hand/display fonts) ship emoji glyphs, so Pillow draws the
-# "missing glyph" tofu box for any emoji in the burned-in text. Instagram's
-# own caption field renders emoji fine with its own font, so this is only
-# stripped from what gets baked into the video pixels — sophia.py still
-# posts the original caption_text (emoji included) as the IG caption.
-_EMOJI_RE = re.compile(
-    "[\U0001F1E6-\U0001F1FF\U0001F300-\U0001FAFF\U00002600-\U000027BF"
-    "\U00002190-\U000021FF\U00002B00-\U00002BFF\U0000FE0F\U0000200D]+"
-)
-
-
-def _strip_emoji_for_burn_in(text):
-    return re.sub(r"[ \t]{2,}", " ", _EMOJI_RE.sub("", text or "")).strip()
 
 
 def inspect_video(path):
@@ -31,7 +15,7 @@ def inspect_video(path):
 
 
 def create_video_clip(input_file, start_time, duration=30, aspect_ratio="1:1",
-                       caption="", caption_bold=True, watermark_enabled=True, watermark_text="",
+                       caption="", caption_bold=False, watermark_enabled=True, watermark_text="",
                        dest_path=None, on_progress=None,
                        crop_x=0.5, crop_y=0.5, zoom=1.0, video_filter="none",
                        font_family="poppins", caption_position="top", font_color="",
@@ -55,7 +39,7 @@ def create_video_clip(input_file, start_time, duration=30, aspect_ratio="1:1",
     if style == "band" and position == "center":
         position = "top"  # same rule the editor's own /api/export enforces — a solid band can't sit dead-center
     cfg = {
-        "text": _strip_emoji_for_burn_in(caption), "font_size": 44, "bold": bool(caption_bold), "align": "center",
+        "text": caption or "", "font_size": 40, "bold": bool(caption_bold), "align": "center",
         "style": style, "position": position,
         "font_family": font_family if font_family in editor_app.FONT_FAMILIES else "poppins",
         "font_color": font_color if font_color in editor_app.TEXT_COLORS else "white",
