@@ -8,6 +8,11 @@ import tempfile
 
 from ..external_apps import get_editor_app
 
+# Not a per-video setting — every clip renders its caption at this size.
+# editor_bridge.py reads this same constant for the manual-edit preload, so
+# there's one place to change it instead of two drifting out of sync.
+CAPTION_FONT_SIZE = 34
+
 
 def inspect_video(path):
     editor_app = get_editor_app()
@@ -39,7 +44,7 @@ def create_video_clip(input_file, start_time, duration=30, aspect_ratio="1:1",
     if style == "band" and position == "center":
         position = "top"  # same rule the editor's own /api/export enforces — a solid band can't sit dead-center
     cfg = {
-        "text": caption or "", "font_size": 40, "bold": bool(caption_bold), "align": "center",
+        "text": caption or "", "font_size": CAPTION_FONT_SIZE, "bold": bool(caption_bold), "align": "center",
         "style": style, "position": position,
         "font_family": font_family if font_family in editor_app.FONT_FAMILIES else "poppins",
         "font_color": font_color if font_color in editor_app.TEXT_COLORS else "white",

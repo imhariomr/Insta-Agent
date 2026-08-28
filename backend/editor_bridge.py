@@ -14,6 +14,7 @@ from werkzeug.serving import make_server
 
 from . import config, db
 from .external_apps import get_editor_app
+from .tools import editor_tool
 
 _server = None
 _lock = threading.Lock()
@@ -76,6 +77,7 @@ def open_for_manual_edit(video, agency_base):
         "watermark_text": batch["watermark_text"] or "",
         "start": video["start_time_seconds"],
         "clip_duration": config.CLIP_DURATION_SECONDS,
+        "font_size": editor_tool.CAPTION_FONT_SIZE,
     }
     with editor_app.VIDEOS_LOCK:
         editor_app.VIDEOS[editor_video_id] = {

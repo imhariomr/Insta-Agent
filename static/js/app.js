@@ -532,6 +532,7 @@ function openNewBatchModal(draft) {
     </div>
     <div class="field check-row"><input type="checkbox" id="nb-watermark-enabled" ${!draft || draft.watermark_enabled ? "checked" : ""}><label style="margin:0">Enable watermark</label></div>
     <div class="field"><label>Watermark Text</label><input id="nb-watermark-text" placeholder="@myinstagram" value="${escapeHtml(draft?.watermark_text || "")}"></div>
+    <div class="field"><label>Hashtags</label><input id="nb-hashtags" placeholder="#reels #fyp #viral" value="${escapeHtml(draft?.hashtags || "")}"></div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="nb-cancel">Cancel</button>
       <button type="button" class="btn btn-primary" id="nb-start">Start Batch</button>
@@ -684,6 +685,7 @@ function openNewBatchModal(draft) {
       resolution: modal.querySelector("#nb-resolution").value,
       watermark_enabled: modal.querySelector("#nb-watermark-enabled").checked,
       watermark_text: modal.querySelector("#nb-watermark-text").value,
+      hashtags: modal.querySelector("#nb-hashtags").value,
       show_advanced: showAdvancedCb.checked,
     }));
   }
@@ -722,6 +724,7 @@ function openNewBatchModal(draft) {
       resolution: modal.querySelector("#nb-resolution").value,
       watermark_enabled: modal.querySelector("#nb-watermark-enabled").checked,
       watermark_text: modal.querySelector("#nb-watermark-text").value.trim(),
+      hashtags: modal.querySelector("#nb-hashtags").value.trim(),
     };
     const res = await fetch("/api/batches", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = await res.json();

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS batches (
     resolution TEXT NOT NULL,
     watermark_enabled INTEGER NOT NULL,
     watermark_text TEXT NOT NULL DEFAULT '',
+    hashtags TEXT NOT NULL DEFAULT '',
     caption_examples_json TEXT NOT NULL DEFAULT '[]',
     style_instructions TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'QUEUED',
@@ -109,6 +110,7 @@ def init_db():
         _ensure_column(conn, "videos", "caption_style", "TEXT NOT NULL DEFAULT 'band'")
         _ensure_column(conn, "videos", "skip_caption", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(conn, "batches", "stop_requested", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(conn, "batches", "hashtags", "TEXT NOT NULL DEFAULT ''")
         conn.commit()
     finally:
         conn.close()
@@ -118,13 +120,13 @@ def _row(row):
     return dict(row) if row is not None else None
 
 
-def create_batch(resolution, watermark_enabled, watermark_text):
+def create_batch(resolution, watermark_enabled, watermark_text, hashtags=""):
     conn = get_conn()
     try:
         cur = conn.execute(
-            "INSERT INTO batches (created_at, resolution, watermark_enabled, watermark_text, status) "
-            "VALUES (?, ?, ?, ?, 'QUEUED')",
-            (time.time(), resolution, int(watermark_enabled), watermark_text),
+            "INSERT INTO batches (created_at, resolution, watermark_enabled, watermark_text, hashtags, status) "
+            "VALUES (?, ?, ?, ?, ?, 'QUEUED')",
+            (time.time(), resolution, int(watermark_enabled), watermark_text, hashtags),
         )
         conn.commit()
         return cur.lastrowid

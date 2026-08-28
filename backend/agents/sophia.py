@@ -13,6 +13,16 @@ from ..tools import instagram_tool
 from . import michael
 
 
+def _build_caption(videos, hashtags):
+    base = next((v["caption_text"] for v in videos if v["caption_text"]), "")
+    hashtags = (hashtags or "").strip()
+    if not hashtags:
+        return base
+    # Classic IG spacer: three lone-dot lines push the hashtags below the
+    # "...more" fold instead of cluttering the caption itself.
+    return f"{base}\n.\n.\n.\n{hashtags}" if base else hashtags
+
+
 def _revert_to_waiting_approval(batch_id, videos):
     """On any publish failure: batch goes back to WAITING_APPROVAL, and so
     does every video still marked PUBLISHING — otherwise they're stuck
@@ -27,6 +37,7 @@ def publish_batch(batch_id):
     batch = db.get_batch(batch_id)
     videos = db.list_videos(batch_id)
     is_single = len(videos) == 1
+    caption = _build_caption(videos, batch["hashtags"])
 
     status = instagram_tool.connection_status()
     if not status["connected"]:
@@ -66,7 +77,7 @@ def publish_batch(batch_id):
             push_state(batch_id=batch_id)
             return {"success": False, "error": "Public media URL became unavailable during publishing."}
 
-        result = instagram_tool.upload_instagram_media(video_url, is_carousel_item=not is_single)
+        result = instagram_tool.upload_instagram_media(video_url, is_carousel_item=not is_single, caption=caption)
         live_progress.clear(video["id"])
         if not result["success"]:
             _revert_to_waiting_approval(batch_id, videos)
@@ -83,7 +94,6 @@ def publish_batch(batch_id):
         published = instagram_tool.publish_instagram_carousel(container_ids[0])
     else:
         emit("Sophia", "Creating carousel", batch_id=batch_id)
-        caption = next((v["caption_text"] for v in videos if v["caption_text"]), "")
         carousel = instagram_tool.create_instagram_carousel(container_ids, caption=caption)
         if not carousel["success"]:
             _revert_to_waiting_approval(batch_id, videos)
@@ -123,7 +133,7 @@ if __name__ == "__main__":
         {"id": 1, "batch_id": 1, "idx": 0, "final_path": "a.mp4", "caption_text": "cap A", "ig_container_id": "already_uploaded"},
         {"id": 2, "batch_id": 1, "idx": 1, "final_path": "b.mp4", "caption_text": "", "ig_container_id": None},
     ]
-    batch = {"id": 1, "watermark_enabled": 0, "watermark_text": ""}
+    batch = {"id": 1, "watermark_enabled": 0, "watermark_text": "", "hashtags": "#reels #fyp"}
 
     with patch("__main__.db") as mock_db, \
          patch("__main__.tunnel") as mock_tunnel, \
@@ -146,6 +156,8 @@ if __name__ == "__main__":
         assert result == {"success": True, "post_id": "post_1"}
         mock_ig.upload_instagram_media.assert_called_once()  # only Video #2 — Video #1 was reused, not re-uploaded
         assert mock_ig.upload_instagram_media.call_args[0][0] == "https://example.com/media/1/b.mp4"
-        mock_ig.create_instagram_carousel.assert_called_once_with(["already_uploaded", "new_upload"], caption="cap A")
+        expected_caption = "cap A\n.\n.\n.\n#reels #fyp"
+        assert mock_ig.upload_instagram_media.call_args.kwargs["caption"] == expected_caption
+        mock_ig.create_instagram_carousel.assert_called_once_with(["already_uploaded", "new_upload"], caption=expected_caption)
 
     print("sophia.py self-check OK (an already-uploaded video is reused on retry, not re-uploaded)")

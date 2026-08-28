@@ -95,8 +95,9 @@ def api_create_batch():
     resolution = (data.get("resolution") or "720p").strip()
     watermark_enabled = bool(data.get("watermark_enabled", True))
     watermark_text = (data.get("watermark_text") or "").strip()
+    hashtags = (data.get("hashtags") or "").strip()
 
-    batch_id = db.create_batch(resolution, watermark_enabled, watermark_text)
+    batch_id = db.create_batch(resolution, watermark_enabled, watermark_text, hashtags)
     for idx, v in enumerate(videos_in):
         start_seconds = timeparse.parse_timestamp(v.get("start_time", 0))
         caption_text = (v.get("caption") or "").strip() or None

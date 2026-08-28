@@ -128,7 +128,7 @@ def _poll_container(container_id, timeout=None, interval=None):
                      f"(last status: {last_status or 'unknown'})."}
 
 
-def upload_instagram_media(video_url, is_carousel_item=True):
+def upload_instagram_media(video_url, is_carousel_item=True, caption=""):
     blocked = _blocked()
     if blocked:
         return blocked
@@ -136,12 +136,19 @@ def upload_instagram_media(video_url, is_carousel_item=True):
         # Meta removed media_type=VIDEO (confirmed via a real API error:
         # "media_type के लिए 'वीडियो' वैल्यू को हटा दिया गया है") — all
         # video posts, including carousel children, now use REELS.
-        resp = requests.post(f"{GRAPH_BASE}/{config.IG_USER_ID}/media", data={
+        data = {
             "media_type": "REELS",
             "video_url": video_url,
             "is_carousel_item": "true" if is_carousel_item else "false",
             "access_token": config.IG_ACCESS_TOKEN,
-        }, timeout=30)
+        }
+        # Carousel children can't carry their own caption — only the parent
+        # CAROUSEL container can (set via create_instagram_carousel); a
+        # single (non-carousel) post has no parent container, so this is
+        # the only place its caption is ever sent.
+        if caption and not is_carousel_item:
+            data["caption"] = caption
+        resp = requests.post(f"{GRAPH_BASE}/{config.IG_USER_ID}/media", data=data, timeout=30)
         data = resp.json()
     except requests.RequestException as exc:
         return {"success": False, "error": f"Instagram upload request failed: {exc}"}
