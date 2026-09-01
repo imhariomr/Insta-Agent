@@ -42,14 +42,23 @@ EDITOR_APP_PORT = int(os.environ.get("EDITOR_APP_PORT", "5050"))
 # LLM: OpenAI-SDK-compatible client pointed at NVIDIA NIM.
 NVIDIA_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 NIM_BASE_URL = os.environ.get("NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
-# meta/llama3-70b-instruct (this project's original choice) 404s on this
-# NIM account now — deprecated/renamed on NVIDIA's catalog. Verified via
-# client.models.list() that meta/llama-3.3-70b-instruct is actually
-# available; override with NIM_TEXT_MODEL if your account differs.
-NIM_TEXT_MODEL = os.environ.get("NIM_TEXT_MODEL", "meta/llama-3.3-70b-instruct")
-# This vision model has no text-only chat mode issue, but frame-analysis
-# calls still need a real VLM, which the text model above is not.
-NIM_VISION_MODEL = os.environ.get("NIM_VISION_MODEL", "meta/llama-3.2-90b-vision-instruct")
+# meta/llama3-70b-instruct, then meta/llama-3.3-70b-instruct (this
+# project's two earlier choices) have both since hit end-of-life and 410
+# on this NIM account — NVIDIA keeps retiring hosted models out from under
+# pinned names. Re-verified 2026-08-29 by hitting /v1/models and then
+# actually round-tripping a real chat completion against ~20 candidates
+# (most 404/410/timeout for this account) — meta/llama-3.2-11b-vision-instruct
+# was the one that reliably worked for both plain chat and JSON output, so
+# it now covers text too instead of adding a third model to track. If this
+# one also dies, override via NIM_TEXT_MODEL/NIM_VISION_MODEL — or re-run
+# the same probe: list models with client.models.list(), then actually call
+# client.chat.completions.create(...) on candidates, since a model
+# appearing in the list doesn't mean this account can actually call it.
+NIM_TEXT_MODEL = os.environ.get("NIM_TEXT_MODEL", "meta/llama-3.2-11b-vision-instruct")
+# meta/llama-3.2-90b-vision-instruct (the previous choice) now times out
+# consistently on this account — swapped to the smaller vision model that's
+# confirmed to actually respond; frame-analysis calls need a real VLM.
+NIM_VISION_MODEL = os.environ.get("NIM_VISION_MODEL", "meta/llama-3.2-11b-vision-instruct")
 # Some hosted VLMs (this one included) reject more than 1 image per request
 # unless the deployment raised --limit-mm-per-prompt. Raise this if yours
 # supports more.
