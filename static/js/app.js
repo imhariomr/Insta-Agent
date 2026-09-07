@@ -48,6 +48,11 @@ function elapsedLabel(sinceTs) {
   return secs < 60 ? `${Math.floor(secs)}s` : `${Math.floor(secs / 60)}m ${Math.floor(secs % 60)}s`;
 }
 
+function formatMmSs(totalSeconds) {
+  const secs = Math.max(0, Math.round(totalSeconds || 0));
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+}
+
 function activeVideoFor(name) {
   const status = ACTIVE_STATUS_BY_EMPLOYEE[name];
   if (!status) return null;
@@ -266,8 +271,12 @@ function renderKanban() {
   });
 }
 
-async function retryVideo(videoId) {
-  await fetch(`/api/videos/${videoId}/retry`, { method: "POST" });
+async function retryVideo(videoId, overrides) {
+  await fetch(`/api/videos/${videoId}/retry`, {
+    method: "POST",
+    headers: overrides ? { "Content-Type": "application/json" } : undefined,
+    body: overrides ? JSON.stringify(overrides) : undefined,
+  });
   closeModal();
   await fetchState();
 }
@@ -423,6 +432,10 @@ function openEmployeeDetail(name, video) {
   if (video && video.status === "FAILED") {
     body = `<p><strong>Video #${video.idx + 1} failed</strong></p>
       <p style="color:var(--red)">${escapeHtml(video.error_message || "Unknown error")}</p>
+      <div class="field"><label>Start time (mm:ss) — edit if that's the problem</label>
+        <input id="retry-start-time" value="${formatMmSs(video.start_time_seconds)}"></div>
+      <div class="field"><label>YouTube URL — edit if that's the problem</label>
+        <input id="retry-youtube-url" value="${escapeHtml(video.youtube_url)}"></div>
       <button type="button" class="btn btn-primary" data-retry="${video.id}">Retry</button>`;
   } else if (name === "Michael") {
     body = `<p>Coordinates the whole team and is your point of contact.</p>`;
@@ -449,7 +462,12 @@ function openEmployeeDetail(name, video) {
     <div class="modal-actions"><button type="button" class="btn btn-secondary" id="detail-close">Close</button></div>`);
   document.getElementById("detail-close").onclick = closeModal;
   const retryBtn = modal.querySelector("[data-retry]");
-  if (retryBtn) retryBtn.onclick = () => retryVideo(retryBtn.dataset.retry);
+  if (retryBtn) retryBtn.onclick = () => {
+    const startInput = modal.querySelector("#retry-start-time");
+    const urlInput = modal.querySelector("#retry-youtube-url");
+    const overrides = startInput ? { start_time: startInput.value, youtube_url: urlInput.value } : undefined;
+    retryVideo(retryBtn.dataset.retry, overrides);
+  };
 }
 
 function confirmApprove(batchId) {

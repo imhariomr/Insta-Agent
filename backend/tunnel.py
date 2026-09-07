@@ -18,7 +18,7 @@ from . import config
 
 TUNNEL_URL_RE = re.compile(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com")
 STARTUP_TIMEOUT = 25
-HEALTH_CHECK_TIMEOUT = 5
+HEALTH_CHECK_TIMEOUT = 8
 MONITOR_INTERVAL = 15
 
 # Valid values for TunnelManager.status:
@@ -149,7 +149,13 @@ class TunnelManager:
         return False
 
     def health_check_now(self):
-        return bool(self._public_url) and self._health_check(self._public_url, retries=1, delay=0)
+        # Cloudflare's free Quick Tunnels have no SLA and do have occasional
+        # transient blips, especially while genuinely busy serving a real
+        # upload — a single failed ping isn't reliable evidence the tunnel
+        # is actually dead. A hard single-shot check here previously meant
+        # one blip mid-publish tore down a perfectly good tunnel and aborted
+        # Instagram's in-flight fetch. Same tolerance the startup check uses.
+        return bool(self._public_url) and self._health_check(self._public_url, retries=3, delay=2)
 
     def stop(self):
         self._stop_monitor.set()

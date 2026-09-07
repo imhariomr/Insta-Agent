@@ -3,6 +3,7 @@ thread pool, so e.g. Alex can be downloading Video #3 while Emma writes a
 caption for Video #2 — but every step's status genuinely reflects a real
 tool call finishing, per the "never fake agent activity" rule."""
 import concurrent.futures
+import os
 
 from . import config, db
 from .agents import alex, david, emma, michael, ryan, sophia
@@ -31,11 +32,23 @@ def start_batch(batch_id):
         _executor.submit(_run_video_pipeline, video["id"])
 
 
-def retry_video(video_id):
+def retry_video(video_id, field_updates=None):
+    """field_updates lets a fixable per-video error (e.g. a start time too
+    close to the clip's end) be corrected before retrying, instead of the
+    same bad input just failing again — without restarting the batch. If
+    the video already downloaded successfully, this resumes from Ryan (or
+    Emma if it never got a caption) rather than re-running Alex from
+    scratch, so an edit-and-retry doesn't cost a full re-download."""
     video = db.get_video(video_id)
+    if field_updates:
+        db.update_video(video_id, **field_updates)
+        video = db.get_video(video_id)
     db.update_video(video_id, status="QUEUED", error_message=None)
     push_state(video_id=video_id, batch_id=video["batch_id"])
-    _executor.submit(_run_video_pipeline, video_id)
+    if video["downloaded_path"] and os.path.exists(video["downloaded_path"]):
+        _executor.submit(_safe_rerun_from_caption, video_id, not bool(video["caption_text"]))
+    else:
+        _executor.submit(_run_video_pipeline, video_id)
 
 
 def stop_batch(batch_id):

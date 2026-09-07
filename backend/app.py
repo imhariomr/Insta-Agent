@@ -41,6 +41,20 @@ app = Flask(
 )
 
 
+@app.context_processor
+def inject_asset_version():
+    # Same fix the editor app already uses: a ?v=<mtime> query string on
+    # static assets so an edited app.js/office.css is actually refetched
+    # instead of the browser silently keeping its cached copy forever.
+    def asset_version(filename):
+        path = os.path.join(app.static_folder, filename)
+        try:
+            return int(os.path.getmtime(path))
+        except OSError:
+            return 0
+    return dict(asset_version=asset_version)
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -146,9 +160,18 @@ def api_reject(batch_id):
 
 @app.route("/api/videos/<int:video_id>/retry", methods=["POST"])
 def api_retry_video(video_id):
-    if not db.get_video(video_id):
+    video = db.get_video(video_id)
+    if not video:
         return jsonify({"error": "Video not found."}), 404
-    orchestrator.retry_video(video_id)
+    data = request.get_json(silent=True) or {}
+    field_updates = {}
+    if str(data.get("start_time") or "").strip():
+        field_updates["start_time_seconds"] = timeparse.parse_timestamp(data["start_time"])
+    new_url = (data.get("youtube_url") or "").strip()
+    if new_url and new_url != video["youtube_url"]:
+        field_updates["youtube_url"] = new_url
+        field_updates["downloaded_path"] = None  # old download no longer matches — forces a fresh Alex run
+    orchestrator.retry_video(video_id, field_updates or None)
     return jsonify({"success": True})
 
 

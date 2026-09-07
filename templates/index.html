@@ -2,7 +2,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/css/office.css">
+<link rel="stylesheet" href="/static/css/office.css?v={{ asset_version('css/office.css') }}">
 
 <div class="app">
   <header class="topbar">
@@ -105,4 +105,4 @@
 
 <div id="modal-root"></div>
 
-<script src="/static/js/app.js"></script>
+<script src="/static/js/app.js?v={{ asset_version('js/app.js') }}"></script>

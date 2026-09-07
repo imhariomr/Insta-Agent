@@ -40,21 +40,28 @@ def _blocked():
 
 
 def _check_container_once(container_id):
-    """One GET /<container_id>?fields=status_code call, no looping. Returns
-    (status_code_or_None, api_error_dict_or_None, request_exception_or_None)
-    — exactly one of the three is non-None/non-empty. Shared by the polling
-    loop below and by the one-shot reuse check a retry uses to decide
-    whether an already-uploaded container is still good."""
+    """One GET /<container_id>?fields=status_code,status call, no looping.
+    Returns (status_code_or_None, detail_or_None, api_error_dict_or_None,
+    request_exception_or_None) — exactly one of the last two is
+    non-None/non-empty. Shared by the polling loop below and by the
+    one-shot reuse check a retry uses to decide whether an already-uploaded
+    container is still good.
+
+    'status' (distinct from 'status_code') is the only field Meta exposes
+    that explains *why* a container's status_code is ERROR — an error
+    subcode, per Meta's docs — so without asking for it every failure here
+    was reported as an opaque "status=ERROR" with no way to tell a bad
+    export from a content-policy rejection from a transient Meta issue."""
     try:
         resp = requests.get(f"{GRAPH_BASE}/{container_id}",
-                             params={"fields": "status_code", "access_token": config.IG_ACCESS_TOKEN},
+                             params={"fields": "status_code,status", "access_token": config.IG_ACCESS_TOKEN},
                              timeout=15)
         data = resp.json()
     except requests.RequestException as exc:
-        return None, None, exc
+        return None, None, None, exc
     if "error" in data:
-        return None, data["error"], None
-    return data.get("status_code"), None, None
+        return None, None, data["error"], None
+    return data.get("status_code"), data.get("status"), None, None
 
 
 def container_still_usable(container_id):
@@ -62,15 +69,15 @@ def container_still_usable(container_id):
     partially-failed publish attempt. True only if Graph confirms it's still
     FINISHED right now — containers expire 24h after creation if unused, so
     a stale one must never be trusted without asking Graph first."""
-    status, _error, _exc = _check_container_once(container_id)
+    status, _detail, _error, _exc = _check_container_once(container_id)
     return status == "FINISHED"
 
 
 def _poll_container(container_id, timeout=None, interval=None):
-    """Polls GET /<container_id>?fields=status_code — the same endpoint and
-    status values apply to every container type Meta issues (single image,
-    single video/REELS, or the parent CAROUSEL container); Meta's docs don't
-    define a separate polling flow per media type.
+    """Polls GET /<container_id>?fields=status_code,status — the same
+    endpoint and status values apply to every container type Meta issues
+    (single image, single video/REELS, or the parent CAROUSEL container);
+    Meta's docs don't define a separate polling flow per media type.
 
     Returns {"success": True} once FINISHED, or {"success": False, "error":
     ..., "status": "ERROR"|"EXPIRED"|"TIMEOUT"|"REQUEST_FAILED"} otherwise —
@@ -86,7 +93,7 @@ def _poll_container(container_id, timeout=None, interval=None):
     attempt = 0
     while time.time() < deadline:
         attempt += 1
-        status, api_error, exc = _check_container_once(container_id)
+        status, detail, api_error, exc = _check_container_once(container_id)
 
         if exc is not None:
             print(f"[instagram] container={container_id} attempt={attempt} status-check request failed: {exc}")
@@ -111,12 +118,13 @@ def _poll_container(container_id, timeout=None, interval=None):
             return {"success": False, "status": "REQUEST_FAILED",
                     "error": f"Container status check rejected: {api_error}"}
 
-        print(f"[instagram] container={container_id} attempt={attempt} status={status}")
+        print(f"[instagram] container={container_id} attempt={attempt} status={status} detail={detail}")
         last_status = status
         if status == "FINISHED":
             return {"success": True}
         if status == "ERROR":
-            return {"success": False, "status": "ERROR", "error": f"Media processing failed (status={status})"}
+            return {"success": False, "status": "ERROR",
+                    "error": f"Media processing failed (status=ERROR, detail={detail or 'none given'})"}
         if status == "EXPIRED":
             return {"success": False, "status": "EXPIRED",
                     "error": "Media container expired before it could be published (unused past Meta's 24h window)."}
